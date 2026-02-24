@@ -151,7 +151,7 @@ export function useLiveApi(): UseLiveApiResult {
             if (msg.setupComplete && !greetingSentRef.current) {
               greetingSentRef.current = true;
               session.sendClientContent({
-                turns: { role: "user", parts: [{ text: "The student is ready. Begin with your greeting." }] },
+                turns: { role: "user", parts: [{ text: "The student is ready. Introduce yourself and ask what they need to solve the question." }] },
                 turnComplete: true,
               });
             }
