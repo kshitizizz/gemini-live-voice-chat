@@ -1,11 +1,19 @@
 import { useRef, useState, useCallback } from "react";
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
+import { buildMathTutorSystemInstruction } from "../prompts/math-tutor";
 
 const API_KEY = process.env.GEMINI_API_KEY as string;
 const MODEL = "gemini-2.5-flash-native-audio-preview-09-2025";
 
+export interface ConnectConfig {
+  question: string;
+  answer: string;
+  onUserTranscript?: (text: string) => void;
+  onAgentTranscript?: (text: string) => void;
+}
+
 export interface UseLiveApiResult {
-  connect: () => Promise<void>;
+  connect: (config: ConnectConfig) => Promise<void>;
   disconnect: () => void;
   isConnected: boolean;
   isConnecting: boolean;
@@ -27,6 +35,7 @@ export function useLiveApi(): UseLiveApiResult {
   const outputAnalyserRef = useRef<AnalyserNode | null>(null);
   const sessionRef = useRef<any>(null);
   const nextScheduledTimeRef = useRef<number>(0);
+  const greetingSentRef = useRef<boolean>(false);
 
   // Initialize AudioContext
   const ensureAudioContext = useCallback(() => {
@@ -65,10 +74,13 @@ export function useLiveApi(): UseLiveApiResult {
     setIsConnecting(false);
   }, []);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (config: ConnectConfig) => {
     if (isConnected || isConnecting) return;
     setIsConnecting(true);
     setError(null);
+
+    const { question, answer, onUserTranscript, onAgentTranscript } = config;
+    greetingSentRef.current = false;
 
     try {
       const ctx = ensureAudioContext();
@@ -114,6 +126,8 @@ export function useLiveApi(): UseLiveApiResult {
       // Reset scheduling
       nextScheduledTimeRef.current = ctx.currentTime + 0.1;
 
+      const systemInstruction = buildMathTutorSystemInstruction(question, answer);
+
       const session = await ai.live.connect({
         model: MODEL,
         config: {
@@ -121,6 +135,9 @@ export function useLiveApi(): UseLiveApiResult {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
           },
+          systemInstruction,
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
         },
         callbacks: {
           onopen: () => {
@@ -129,8 +146,25 @@ export function useLiveApi(): UseLiveApiResult {
             setIsConnecting(false);
           },
           onmessage: (msg: LiveServerMessage) => {
+            // Send trigger once when setup is complete (server is ready to accept content)
+            if (msg.setupComplete && !greetingSentRef.current) {
+              greetingSentRef.current = true;
+              session.sendClientContent({
+                turns: { role: "user", parts: [{ text: "The student is ready. Begin with your greeting." }] },
+                turnComplete: true,
+              });
+            }
+            // Handle transcriptions
+            const serverContent = msg.serverContent;
+            if (serverContent?.outputTranscription?.text) {
+              onAgentTranscript?.(serverContent.outputTranscription.text);
+            }
+            if (serverContent?.inputTranscription?.text) {
+              onUserTranscript?.(serverContent.inputTranscription.text);
+            }
+
             // Handle Audio Output
-            const data = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+            const data = serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (data) {
               // Decode Base64 to Int16
               const binaryString = atob(data);
