@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Mic, MicOff, PhoneOff, Loader2, AlertCircle, Send } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { AudioVisualizer } from "./components/AudioVisualizer";
@@ -21,9 +21,18 @@ export default function App() {
 
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [wrongAnswer, setWrongAnswer] = useState("");
   const [conversationLog, setConversationLog] = useState<ConversationEntry[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
+  const conversationScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    conversationScrollRef.current?.scrollTo({
+      top: conversationScrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [conversationLog]);
 
   const onUserTranscript = useCallback((text: string) => {
     if (!text?.trim()) return;
@@ -56,10 +65,11 @@ export default function App() {
     connect({
       question: q,
       answer: a,
+      wrongAnswer: wrongAnswer.trim() || undefined,
       onUserTranscript,
       onAgentTranscript,
     });
-  }, [question, answer, connect, onUserTranscript, onAgentTranscript]);
+  }, [question, answer, wrongAnswer, connect, onUserTranscript, onAgentTranscript]);
 
   const handleDisconnect = useCallback(() => {
     disconnect();
@@ -112,6 +122,24 @@ export default function App() {
             />
           </div>
 
+          {/* Wrong Answer Section */}
+          <div className="shrink-0 space-y-2">
+            <label className="block text-sm font-medium text-neutral-300">
+              Your Attempt / Wrong Answer (optional)
+            </label>
+            <input
+              type="text"
+              value={wrongAnswer}
+              onChange={(e) => setWrongAnswer(e.target.value)}
+              placeholder="e.g. x = 3 (what you got - helps tutor tailor the hint)"
+              className="w-full px-4 py-3 bg-neutral-800/50 rounded-xl border border-white/10 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              disabled={isSubmitted}
+            />
+            <p className="text-xs text-neutral-500">
+              The tutor will analyze if your answer is random or if you need a nudge in the right direction.
+            </p>
+          </div>
+
           {/* Submit Button */}
           <div className="shrink-0">
             <button
@@ -133,7 +161,10 @@ export default function App() {
             <label className="block text-sm font-medium text-neutral-300 shrink-0 mb-2">
               Conversation
             </label>
-            <div className="h-64 overflow-y-auto overflow-x-hidden bg-neutral-800/30 rounded-xl border border-white/10 p-4 space-y-3">
+            <div
+              ref={conversationScrollRef}
+              className="h-64 overflow-y-auto overflow-x-hidden bg-neutral-800/30 rounded-xl border border-white/10 p-4 space-y-3"
+            >
               {conversationLog.length === 0 && !isConnected && !isConnecting && (
                 <p className="text-neutral-500 text-sm">Submit a problem to start the tutoring session.</p>
               )}

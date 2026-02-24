@@ -8,6 +8,7 @@ const MODEL = "gemini-2.5-flash-native-audio-preview-09-2025";
 export interface ConnectConfig {
   question: string;
   answer: string;
+  wrongAnswer?: string;
   onUserTranscript?: (text: string) => void;
   onAgentTranscript?: (text: string) => void;
 }
@@ -79,7 +80,7 @@ export function useLiveApi(): UseLiveApiResult {
     setIsConnecting(true);
     setError(null);
 
-    const { question, answer, onUserTranscript, onAgentTranscript } = config;
+    const { question, answer, wrongAnswer, onUserTranscript, onAgentTranscript } = config;
     greetingSentRef.current = false;
 
     try {
@@ -126,7 +127,7 @@ export function useLiveApi(): UseLiveApiResult {
       // Reset scheduling
       nextScheduledTimeRef.current = ctx.currentTime + 0.1;
 
-      const systemInstruction = buildMathTutorSystemInstruction(question, answer);
+      const systemInstruction = buildMathTutorSystemInstruction(question, answer, wrongAnswer);
 
       const session = await ai.live.connect({
         model: MODEL,
